@@ -111,26 +111,58 @@ export class IolClient {
   private readonly fetch: typeof fetch;
   private readonly baseUrl: string;
   private readonly now: () => number;
+  private readonly timeoutMs: number;
   private memo: TokenSet | null | undefined;
+  /** Renovación en curso: requests paralelas comparten un solo refresh/login. */
+  private inflight: Promise<string> | null = null;
 
   constructor(
     private readonly creds: IolCredentials,
     private readonly store: TokenStore,
-    opts: { fetch?: typeof fetch; baseUrl?: string; now?: () => number } = {},
+    opts: { fetch?: typeof fetch; baseUrl?: string; now?: () => number; timeoutMs?: number } = {},
   ) {
     this.fetch = opts.fetch ?? globalThis.fetch.bind(globalThis);
     this.baseUrl = opts.baseUrl ?? IOL_BASE_URL;
     this.now = opts.now ?? Date.now;
+    // Menor al límite de la función en Vercel, para responder un error claro antes de que corte.
+    this.timeoutMs = opts.timeoutMs ?? 20_000;
+  }
+
+  /**
+   * fetch con timeout y log de duración (va a los Runtime Logs; nunca loguea credenciales:
+   * el label es sólo el path).
+   */
+  private async http(label: string, url: string, init: RequestInit): Promise<Response> {
+    const started = Date.now();
+    try {
+      const res = await this.fetch(url, { ...init, signal: AbortSignal.timeout(this.timeoutMs) });
+      console.log(`[iol] ${label} -> ${res.status} en ${Date.now() - started} ms`);
+      return res;
+    } catch (e) {
+      const name = (e as Error)?.name;
+      if (name === 'TimeoutError' || name === 'AbortError') {
+        console.error(`[iol] ${label} sin respuesta tras ${this.timeoutMs} ms`);
+        throw new IolApiError(
+          `IOL no respondió en ${Math.round(this.timeoutMs / 1000)} s (${label}). Probá de nuevo o con un rango de fechas más corto.`,
+          504,
+        );
+      }
+      throw new IolApiError(`No se pudo conectar con IOL (${label}): ${(e as Error).message}`, 502);
+    }
   }
 
   // ---------- auth ----------
 
   private async requestToken(body: Record<string, string>): Promise<TokenSet> {
-    const res = await this.fetch(`${this.baseUrl}/auth/token`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify(body),
-    });
+    const res = await this.http(
+      `POST /auth/token (${body.grant_type})`,
+      `${this.baseUrl}/auth/token`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify(body),
+      },
+    );
     const json = await res.json().catch(() => null);
     if (!res.ok) {
       const msg =
@@ -163,9 +195,19 @@ export class IolClient {
 
   /** Access token vigente: reutiliza, renueva con refresh o hace login, en ese orden. */
   async accessToken(force = false): Promise<string> {
+    const t = await this.tokens();
+    if (!force && t && t.accessExpiresAt - SKEW_MS > this.now()) return t.accessToken;
+    if (!this.inflight) {
+      this.inflight = this.renew().finally(() => {
+        this.inflight = null;
+      });
+    }
+    return this.inflight;
+  }
+
+  private async renew(): Promise<string> {
     const now = this.now();
     const t = await this.tokens();
-    if (!force && t && t.accessExpiresAt - SKEW_MS > now) return t.accessToken;
     if (t && t.refreshExpiresAt - SKEW_MS > now) {
       try {
         const next = await this.requestToken({
@@ -211,7 +253,7 @@ export class IolClient {
   ): Promise<z.infer<T>> {
     const url = `${this.baseUrl}${path}?${new URLSearchParams(query)}`;
     const send = async (force: boolean) =>
-      this.fetch(url, {
+      this.http(`GET ${path}`, url, {
         headers: {
           authorization: `Bearer ${await this.accessToken(force)}`,
           accept: 'application/json',
@@ -246,7 +288,7 @@ export class IolClient {
   activities(from: string, to: string) {
     return this.get(
       '/broker/accounts/activities',
-      { start_date: from, end_date: to, movement_type: 'all', state: 'completed', country: 'AR' },
+      { start_date: from, end_date: to, state: 'completed', country: 'AR' },
       z.array(iolActivity),
     );
   }
@@ -255,7 +297,7 @@ export class IolClient {
   operations(from: string, to: string) {
     return this.get(
       '/broker/accounts/activities/operations',
-      { start_date: from, end_date: to, state: 'all', country: 'AR' },
+      { start_date: from, end_date: to, country: 'AR' },
       z.array(iolOperation),
     );
   }

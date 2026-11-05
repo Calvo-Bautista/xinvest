@@ -57,7 +57,7 @@ writeFileSync(
       handler: 'index.js',
       launcherType: 'Nodejs',
       shouldAddHelpers: false,
-      maxDuration: 30,
+      maxDuration: 60,
     },
     null,
     2,

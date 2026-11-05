@@ -161,3 +161,54 @@ describe('crypto', () => {
     expect(await decryptJson('k2', enc)).toBeNull();
   });
 });
+
+describe('IolClient robustez', () => {
+  it('corta con un error claro si IOL no responde', async () => {
+    const hang = ((_url: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+      })) as typeof fetch;
+    const store: TokenStore = { load: async () => null, save: async () => {} };
+    const c = new IolClient({ username: 'u', password: 'p' }, store, {
+      fetch: hang,
+      timeoutMs: 50,
+    });
+    const err = await c.activities('2025-01-01', '2025-01-02').catch((e) => e);
+    expect(err).toBeInstanceOf(IolApiError);
+    expect(err.status).toBe(504);
+    expect(err.message).toMatch(/no respondió/);
+  });
+
+  it('requests en paralelo comparten una sola renovación de token', async () => {
+    let tokenCalls = 0;
+    const f = (async (url: string) => {
+      if (url.endsWith('/auth/token')) {
+        tokenCalls++;
+        await new Promise((r) => setTimeout(r, 20));
+        return ok(token(String(tokenCalls)));
+      }
+      return ok([]);
+    }) as typeof fetch;
+    let saved: TokenSet | null = {
+      accessToken: 'x',
+      accessExpiresAt: 0,
+      refreshToken: 'R0',
+      refreshExpiresAt: 9e15,
+    };
+    const store: TokenStore = {
+      load: async () => saved,
+      save: async (t) => {
+        saved = t;
+      },
+    };
+    const c = new IolClient({ username: 'u', password: 'p' }, store, {
+      fetch: f,
+      baseUrl: 'https://iol.test',
+    });
+    await Promise.all([
+      c.activities('2025-01-01', '2025-01-02'),
+      c.operations('2025-01-01', '2025-01-02'),
+    ]);
+    expect(tokenCalls).toBe(1);
+  });
+});

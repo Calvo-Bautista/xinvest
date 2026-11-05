@@ -169,6 +169,35 @@ const feeTotal = (a: IolActivity) => {
 
 const dateOf = (a: IolActivity) => a.trade_date.slice(0, 10);
 
+/**
+ * La doc REST habla de estados/tipos en inglés ("completed", "Buy"), pero el MCP oficial de IOL
+ * devuelve abreviaturas en español ("Terminada", "Comp", "Depo"). Aceptamos ambas formas.
+ */
+const NOT_SETTLED = new Set([
+  'cancelled',
+  'cancelada',
+  'pending',
+  'pendiente',
+  'rejected',
+  'rechazada',
+]);
+const isSettled = (a: IolActivity) => !NOT_SETTLED.has(a.status.trim().toLowerCase());
+
+const TYPE_ALIASES: Record<string, string> = {
+  comp: 'Buy',
+  compra: 'Buy',
+  vta: 'Sell',
+  vent: 'Sell',
+  venta: 'Sell',
+  depo: 'Deposit',
+  depósito: 'Deposit',
+  deposito: 'Deposit',
+  extr: 'Withdrawal',
+  extracción: 'Withdrawal',
+  extraccion: 'Withdrawal',
+};
+const canonicalType = (t: string) => TYPE_ALIASES[t.trim().toLowerCase()] ?? t.trim();
+
 export function mapIolActivities(
   activities: IolActivity[],
   operations: IolOperation[],
@@ -177,7 +206,8 @@ export function mapIolActivities(
   for (const o of operations) if (o.ticket_id) byTicket.set(String(o.ticket_id), o);
 
   const sorted = [...activities]
-    .filter((a) => a.status.toLowerCase() === 'completed')
+    .filter(isSettled)
+    .map((a) => ({ ...a, activity_type: canonicalType(a.activity_type) }))
     .sort(
       (x, y) =>
         dateOf(x).localeCompare(dateOf(y)) || x.id.localeCompare(y.id, 'en', { numeric: true }),

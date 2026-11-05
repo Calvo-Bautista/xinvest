@@ -29,7 +29,8 @@ async function wrap<T>(fn: () => Promise<T>): Promise<T> {
   } catch (e) {
     if (e instanceof IolApiError) {
       const trace = e.traceId ? ` (trace ${e.traceId})` : '';
-      throw new HTTPException(e.status === 401 ? 401 : 502, { message: `${e.message}${trace}` });
+      const status = e.status === 401 ? 401 : e.status === 504 ? 504 : 502;
+      throw new HTTPException(status, { message: `${e.message}${trace}` });
     }
     throw e;
   }

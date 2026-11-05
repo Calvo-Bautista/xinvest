@@ -220,3 +220,42 @@ describe('mapIolActivities', () => {
     ]);
   });
 });
+
+describe('formato del MCP de IOL (español)', () => {
+  it('acepta "Terminada", "Comp" y "Depo" como en las respuestas reales', () => {
+    const { operations, unmapped } = mapIolActivities(
+      [
+        act({
+          activity_type: 'Depo',
+          status: 'Terminada',
+          net_amount: 1100000,
+          trade_date: '2026-11-04T13:44:00',
+        }),
+        act({
+          activity_type: 'Comp',
+          status: 'Terminada',
+          ticket_id: '23392462',
+          qty: 49,
+          price: 21620,
+          net_amount: -1063866.47,
+          trade_date: '2026-11-04T13:50:51',
+        }),
+        act({
+          activity_type: 'Comp',
+          status: 'Cancelada',
+          ticket_id: 'X',
+          qty: 1,
+          price: 1,
+          net_amount: -1,
+        }),
+      ],
+      [op('23392462', 'SPY', 'CEDEARS', 'Cedear Spdr S&P 500')],
+    );
+    expect(unmapped).toEqual([]);
+    expect(operations.map((o) => [o.type, o.ticker, o.quantity, o.amount])).toEqual([
+      ['DEPOSIT', null, null, '1100000'],
+      ['BUY', 'SPY', '49', null],
+    ]);
+    expect(operations[1]?.instrument?.type).toBe('CEDEAR');
+  });
+});
