@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { Navigate, NavLink, Route, Routes } from 'react-router';
-import { Segmented } from './components/ui';
+import { ErrorBox, Segmented } from './components/ui';
 import { api, UNAUTHORIZED_EVENT, unwrap } from './lib/api';
 import { CurrencyProvider, useReportingCurrency } from './lib/currency';
 import { DashboardPage } from './pages/Dashboard';
@@ -39,6 +39,19 @@ export function App() {
   }, [qc]);
 
   if (me.isPending) return null;
+  if (me.error) {
+    return (
+      <div className="grid min-h-screen place-items-center px-4">
+        <div className="card w-full max-w-lg space-y-3 p-6">
+          <h1 className="text-lg font-semibold">No se pudo conectar con la API</h1>
+          <ErrorBox error={me.error} />
+          <button type="button" className="btn-ghost" onClick={() => me.refetch()}>
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
   if (me.data && !me.data.authenticated) return <LoginPage />;
 
   return (
