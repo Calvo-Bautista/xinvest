@@ -5,6 +5,7 @@ import { Segmented } from './components/ui';
 import { api, UNAUTHORIZED_EVENT, unwrap } from './lib/api';
 import { CurrencyProvider, useReportingCurrency } from './lib/currency';
 import { DashboardPage } from './pages/Dashboard';
+import { DataPage } from './pages/Data';
 import { InstrumentsPage } from './pages/Instruments';
 import { LoginPage } from './pages/Login';
 import { OperationsPage } from './pages/Operations';
@@ -17,6 +18,7 @@ const NAV = [
   { to: '/operaciones', label: 'Operaciones' },
   { to: '/precios', label: 'Precios y dólar' },
   { to: '/instrumentos', label: 'Instrumentos' },
+  { to: '/datos', label: 'Datos' },
 ];
 
 export function App() {
@@ -106,6 +108,7 @@ function Shell({ authEnabled }: { authEnabled: boolean }) {
           <Route path="/operaciones" element={<OperationsPage />} />
           <Route path="/precios" element={<PricesPage />} />
           <Route path="/instrumentos" element={<InstrumentsPage />} />
+          <Route path="/datos" element={<DataPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

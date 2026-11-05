@@ -1,18 +1,29 @@
-import { CURRENCIES, FX_PAIRS, INSTRUMENT_TYPES, REPORTING_CURRENCIES } from '@xinvest/domain';
+import { CURRENCIES, Dec, FX_PAIRS, INSTRUMENT_TYPES, REPORTING_CURRENCIES } from '@xinvest/domain';
 import { z } from 'zod';
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** Fecha calendario real (rechaza 2025-02-30). */
 export const isoDate = z
   .string()
+  .trim()
   .regex(ISO_DATE_RE, 'Fecha inválida (YYYY-MM-DD)')
-  .refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)), 'Fecha inválida');
+  .refine((s) => {
+    const d = new Date(`${s}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+  }, 'Fecha inválida');
 
-/** Decimal no negativo como string canónico. */
-export const nonNegDecimal = z
+const decimalString = z
   .string()
   .trim()
   .regex(/^\d+(\.\d+)?$/, 'Número inválido (usar punto decimal, sin separador de miles)');
-export const posDecimal = nonNegDecimal.refine((s) => /[1-9]/.test(s), 'Debe ser mayor a 0');
+/** Forma canónica para guardar: "010.50" → "10.5". */
+const canonical = (s: string) => new Dec(s).toFixed();
+
+/** Decimal no negativo como string canónico. */
+export const nonNegDecimal = decimalString.transform(canonical);
+export const posDecimal = decimalString
+  .refine((s) => /[1-9]/.test(s), 'Debe ser mayor a 0')
+  .transform(canonical);
 
 export const currency = z.enum(CURRENCIES);
 export const reportingCurrency = z.enum(REPORTING_CURRENCIES);

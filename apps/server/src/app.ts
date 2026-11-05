@@ -5,6 +5,7 @@ import { secureHeaders } from 'hono/secure-headers';
 import { DbFxRateProvider, DbPriceProvider } from './adapters/db-providers';
 import { type AuthConfig, assertAuthConfig, authRoutes, requireAuth } from './auth';
 import type { Db } from './db/types';
+import { csvRoutes } from './routes/csv';
 import { instrumentRoutes } from './routes/instruments';
 import { operationRoutes } from './routes/operations';
 import { portfolioRoutes } from './routes/portfolio';
@@ -45,7 +46,8 @@ export function createApp(deps: AppDeps) {
     .route('/operations', operationRoutes(db))
     .route('/prices', priceRoutes(db))
     .route('/fx-rates', fxRoutes(db))
-    .route('/portfolio', portfolioRoutes(db, providers));
+    .route('/portfolio', portfolioRoutes(db, providers))
+    .route('/csv', csvRoutes(db));
 
   api.onError((err, c) => {
     if (err instanceof HTTPException) {
