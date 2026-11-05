@@ -102,6 +102,24 @@ export const fxRates = sqliteTable(
   (t) => [primaryKey({ columns: [t.date, t.pair, t.source] })],
 );
 
+/**
+ * Estado de integraciones externas (hoy sólo IOL). En serverless no hay memoria entre
+ * requests, así que los tokens OAuth viven acá, cifrados con AES-GCM.
+ */
+export const integrations = sqliteTable('integrations', {
+  provider: text('provider').primaryKey(),
+  /** JSON cifrado con los tokens (ver adapters/iol/crypto.ts). */
+  tokenData: text('token_data'),
+  lastOperationsSyncAt: text('last_operations_sync_at'),
+  /** Fecha (YYYY-MM-DD) hasta la que se sincronizaron operaciones. */
+  lastOperationsSyncTo: text('last_operations_sync_to'),
+  lastPricesSyncAt: text('last_prices_sync_at'),
+  lastPricesSyncTo: text('last_prices_sync_to'),
+  /** JSON con el resumen de la última sincronización (para la UI). */
+  lastResult: text('last_result'),
+  updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+});
+
 export type InstrumentRow = typeof instruments.$inferSelect;
 export type OperationRow = typeof operations.$inferSelect;
 export type PriceRow = typeof prices.$inferSelect;

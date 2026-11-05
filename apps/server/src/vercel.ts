@@ -5,7 +5,7 @@
 import { getRequestListener } from '@hono/node-server';
 import { createClient } from '@libsql/client/web';
 import { drizzle } from 'drizzle-orm/libsql/web';
-import { authConfigFromEnv, createApp } from './app';
+import { authConfigFromEnv, createApp, iolFromEnv } from './app';
 import * as schema from './db/schema';
 
 const url = process.env.DATABASE_URL;
@@ -15,6 +15,11 @@ if (!url || url.startsWith('file:')) {
 
 const client = createClient({ url, authToken: process.env.DATABASE_AUTH_TOKEN });
 const db = drizzle(client, { schema });
-const app = createApp({ db, auth: authConfigFromEnv(process.env) });
+const app = createApp({
+  db,
+  auth: authConfigFromEnv(process.env),
+  iol: iolFromEnv(db, process.env),
+  cronSecret: process.env.CRON_SECRET,
+});
 
 export default getRequestListener(app.fetch);

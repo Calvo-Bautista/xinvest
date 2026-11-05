@@ -11,9 +11,23 @@ import { fxRatesRepo, pricesRepo } from '../db/repositories';
 import type { Db } from '../db/types';
 
 /**
- * MVP: los precios se cargan a mano y viven en la tabla `prices`.
- * Fase 2: un IolPriceProvider implementará getQuote() y un job persistirá los precios
- * obtenidos en esta misma tabla (source = 'iol'), así la historia sigue saliendo de acá.
+ * Si para la misma clave (instrumento/par + fecha) hay varias fuentes, gana la carga manual:
+ * es una corrección explícita del usuario sobre lo que trajo IOL.
+ */
+export function preferManual<T extends { source: string }>(rows: T[], key: (r: T) => string): T[] {
+  const best = new Map<string, T>();
+  for (const r of rows) {
+    const k = key(r);
+    const cur = best.get(k);
+    if (!cur || (r.source === 'manual' && cur.source !== 'manual')) best.set(k, r);
+  }
+  return [...best.values()];
+}
+
+/**
+ * Precios desde la tabla `prices`: cargados a mano (source = 'manual') o traídos de IOL por la
+ * sincronización (source = 'iol'). La historia siempre sale de la DB, así el timeline funciona
+ * igual con cualquiera de las dos fuentes.
  */
 export class DbPriceProvider implements PriceProvider {
   readonly name = 'db';
@@ -22,7 +36,10 @@ export class DbPriceProvider implements PriceProvider {
   async getHistory(instruments: Instrument[], range: { to: string }): Promise<PricePoint[]> {
     const ids = new Set(instruments.map((i) => i.id));
     const rows = await pricesRepo(this.db).list({ to: range.to });
-    return rows.filter((r) => ids.has(r.instrumentId)).map(toPricePoint);
+    return preferManual(
+      rows.filter((r) => ids.has(r.instrumentId)),
+      (r) => `${r.instrumentId}|${r.date}`,
+    ).map(toPricePoint);
   }
 }
 
@@ -32,6 +49,9 @@ export class DbFxRateProvider implements FxRateProvider {
 
   async getHistory(pairs: FxPair[], range: { to: string }): Promise<FxRatePoint[]> {
     const rows = await fxRatesRepo(this.db).list({ to: range.to });
-    return rows.filter((r) => pairs.includes(r.pair)).map(toFxRatePoint);
+    return preferManual(
+      rows.filter((r) => pairs.includes(r.pair)),
+      (r) => `${r.pair}|${r.date}`,
+    ).map(toFxRatePoint);
   }
 }

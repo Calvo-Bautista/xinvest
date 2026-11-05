@@ -29,7 +29,10 @@ export const authEnabled = (cfg: AuthConfig) => cfg.production || cfg.password.l
 /** Protege todo /api salvo /api/auth/*. */
 export const requireAuth = (cfg: AuthConfig) =>
   createMiddleware(async (c, next) => {
-    if (!authEnabled(cfg) || c.req.path.startsWith('/api/auth/')) return next();
+    // /api/auth/* es público; /api/cron/* se protege con CRON_SECRET en su propia ruta.
+    const p = c.req.path;
+    if (!authEnabled(cfg) || p.startsWith('/api/auth/') || p.startsWith('/api/cron/'))
+      return next();
     const token = getCookie(c, COOKIE);
     if (!token) throw new HTTPException(401, { message: 'No autenticado' });
     try {

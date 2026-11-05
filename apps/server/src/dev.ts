@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server';
 import { migrate } from 'drizzle-orm/libsql/migrator';
-import { authConfigFromEnv, createApp } from './app';
+import { authConfigFromEnv, createApp, iolFromEnv } from './app';
 import { authEnabled } from './auth';
 import { createNodeDb, databaseUrl, MIGRATIONS_FOLDER } from './db/node-client';
 
@@ -11,7 +11,12 @@ await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
 const auth = authConfigFromEnv(process.env);
 if (!auth.sessionSecret) auth.sessionSecret = 'dev-only-secret-not-for-production-use!!';
-const app = createApp({ db, auth });
+const app = createApp({
+  db,
+  auth,
+  iol: iolFromEnv(db, process.env),
+  cronSecret: process.env.CRON_SECRET,
+});
 const port = Number(process.env.API_PORT ?? 8787);
 
 serve({ fetch: app.fetch, port }, () => {
