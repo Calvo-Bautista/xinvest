@@ -37,28 +37,33 @@ const fnDir = join(out, 'functions/api.func');
 mkdirSync(fnDir, { recursive: true });
 await build({
   entryPoints: [join(root, 'apps/server/src/vercel.ts')],
-  outfile: join(fnDir, 'index.mjs'),
+  outfile: join(fnDir, 'index.js'),
   bundle: true,
   platform: 'node',
   target: 'node22',
-  format: 'esm',
+  // CommonJS: es el formato que el launcher Node de Vercel carga sin sorpresas.
+  format: 'cjs',
   minify: false,
   sourcemap: 'linked',
-  // Algunas dependencias CJS usan require() de builtins: lo proveemos en ESM.
-  banner: {
-    js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);",
-  },
+  // El launcher busca el handler en module.exports; esbuild lo deja en .default.
+  footer: { js: 'module.exports = module.exports.default;' },
   logLevel: 'warning',
 });
 writeFileSync(
   join(fnDir, '.vc-config.json'),
   JSON.stringify(
-    { runtime: 'nodejs22.x', handler: 'index.mjs', launcherType: 'Nodejs', maxDuration: 30 },
+    {
+      runtime: 'nodejs22.x',
+      handler: 'index.js',
+      launcherType: 'Nodejs',
+      shouldAddHelpers: false,
+      maxDuration: 30,
+    },
     null,
     2,
   ),
 );
-writeFileSync(join(fnDir, 'package.json'), JSON.stringify({ type: 'module' }));
+writeFileSync(join(fnDir, 'package.json'), JSON.stringify({ type: 'commonjs' }));
 
 // 4. Rutas
 writeFileSync(

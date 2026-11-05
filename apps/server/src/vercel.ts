@@ -32,32 +32,65 @@ export function configProblems(env: Record<string, string | undefined>): string[
   return problems;
 }
 
-function build(): (req: Request) => Response | Promise<Response> {
-  const problems = configProblems(process.env);
-  if (problems.length) {
-    console.error(`Configuración incompleta: ${problems.join(' ')}`);
-    return () =>
-      Response.json(
-        {
-          error: `Configuración incompleta en Vercel. ${problems.join(' ')} Cargalas en Settings → Environment Variables (entorno Production) y redeployá.`,
-          problems,
-        },
-        { status: 503 },
-      );
-  }
-  const client = createClient({
-    // biome-ignore lint/style/noNonNullAssertion: validado en configProblems
-    url: process.env.DATABASE_URL!,
-    authToken: process.env.DATABASE_AUTH_TOKEN,
-  });
-  const db = drizzle(client, { schema });
-  const app = createApp({
-    db,
-    auth: authConfigFromEnv(process.env),
-    iol: iolFromEnv(db, process.env),
-    cronSecret: process.env.CRON_SECRET,
-  });
-  return app.fetch;
+type Fetch = (req: Request) => Response | Promise<Response>;
+
+/** Al pegar valores en Vercel es fácil arrastrar espacios o saltos de línea: los limpiamos. */
+function cleanEnv(env: NodeJS.ProcessEnv): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {};
+  for (const [k, v] of Object.entries(env)) out[k] = v?.trim();
+  return out;
 }
 
-export default getRequestListener(build());
+const fail =
+  (status: number, error: string, extra: Record<string, unknown> = {}): Fetch =>
+  () =>
+    Response.json({ error, ...extra }, { status });
+
+function build(): Fetch {
+  const env = cleanEnv(process.env);
+  const problems = configProblems(env);
+  if (problems.length) {
+    console.error(`Configuración incompleta: ${problems.join(' ')}`);
+    return fail(
+      503,
+      `Configuración incompleta en Vercel. ${problems.join(' ')} Cargalas en Settings → Environment Variables (entorno Production) y redeployá.`,
+      { problems },
+    );
+  }
+  try {
+    const client = createClient({
+      // biome-ignore lint/style/noNonNullAssertion: validado en configProblems
+      url: env.DATABASE_URL!,
+      authToken: env.DATABASE_AUTH_TOKEN,
+    });
+    const db = drizzle(client, { schema });
+    const app = createApp({
+      db,
+      auth: authConfigFromEnv(env),
+      iol: iolFromEnv(db, env),
+      cronSecret: env.CRON_SECRET,
+    });
+    return app.fetch;
+  } catch (e) {
+    // El detalle completo va a los Runtime Logs de Vercel; al cliente sólo el tipo de error.
+    console.error('Error inicializando la API:', e);
+    return fail(
+      503,
+      `Error inicializando la API (${(e as Error).name}). Revisá los Runtime Logs de Vercel.`,
+    );
+  }
+}
+
+const app = build();
+
+/** Último recurso: un error no manejado se loguea y responde 500 en vez de matar la función. */
+const safeFetch: Fetch = async (req) => {
+  try {
+    return await app(req);
+  } catch (e) {
+    console.error('Error no manejado:', e);
+    return Response.json({ error: 'Error interno' }, { status: 500 });
+  }
+};
+
+export default getRequestListener(safeFetch);
