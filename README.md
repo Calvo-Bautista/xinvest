@@ -63,11 +63,30 @@ apps/web          SPA React. Tipos de la API inferidos de apps/server vía hono/
 | Cotización faltante             | Se usa la última cotización ≤ fecha. Si no hay ninguna anterior, se usa la primera posterior y se muestra una advertencia.                                                                                                    |
 | P&L total                       | `valor total − capital neto aportado` = realizado + no realizado + rentas/div. + dif. de cambio de la caja − gastos de depósitos/retiros (hay un test que lo verifica).                                                       |
 
-## Fase 2 (preparado, no implementado)
+## Integración con InvertirOnline
 
-- **IOL:** implementar `PriceProvider.getQuote` y `OperationSource` (`packages/domain/src/ports.ts`) en
-  `apps/server/src/adapters/iol/`. Credenciales `IOL_USERNAME`/`IOL_PASSWORD` en `.env`, con token y refresh token
-  persistidos en la DB, porque en serverless no hay memoria entre requests. El sync hace upsert por
-  `operations.external_id`, que es único. Un Vercel Cron diario puede disparar el sync.
-- **MEP/CCL automático:** un `FxRateProvider` que lea una fuente pública y persista en `fx_rates` con `source` propio.
+Usa la API oficial (`https://api.iolinversiones.com`, [docs](https://developers.iolinversiones.com)). Para activarla,
+definí `IOL_USERNAME` e `IOL_PASSWORD` en `.env` o en Vercel y entrá a la página **IOL**.
+
+- **Auth:** el login es OAuth con contraseña y devuelve un access token de 15 minutos y un refresh token de 30 días. Los
+  tokens se guardan **cifrados** (AES-GCM) en la tabla `integrations`, porque en serverless no hay memoria entre requests.
+  La contraseña sólo vive en el entorno del server.
+- **Operaciones:** `/activities` trae cantidad, precio, neto y gastos desglosados; `/activities/operations` aporta el
+  ticker, y las dos se cruzan por `ticket_id`. Las especies en dólares se normalizan al ticker base (AL30D → AL30,
+  AAPLD → AAPL, YMCXD → YMCXO), así una compra en pesos y una venta en dólares, que es lo que pasa al hacer dólar MEP,
+  afectan la misma posición. Siempre se previsualiza antes de importar:
+  - lo ya importado se saltea, por `external_id`;
+  - lo cargado a mano se **vincula** en vez de duplicarse;
+  - si la historia queda inconsistente, no se importa nada;
+  - lo que no se puede mapear con certeza (remuneración de saldos, transferencias de títulos, etc.) se lista para
+    cargarlo a mano.
+- **Precios:** cierres diarios (`/bars`) de cada instrumento operado, y **dólar MEP/CCL implícito** = AL30 ÷ AL30D (o
+  AL30C). Si para el mismo día hay un precio manual, gana el manual. Los FCI no cotizan en BYMA, así que la cuotaparte
+  se carga a mano.
+- **Cron:** `vercel.json` corre `/api/cron/iol` de lunes a viernes a las 19 h de Argentina. Para activarlo, definí
+  `CRON_SECRET`.
+
+## Pendiente
+
 - **Inflación:** tabla `index_values` (CER/IPC) en una nueva migración, más una función de dominio de rendimiento real.
+- **IOL:** cauciones tomadoras, opciones y cuentas del exterior (CI Ext.) no se mapean todavía.

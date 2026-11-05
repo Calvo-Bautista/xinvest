@@ -7,6 +7,7 @@ import { CurrencyProvider, useReportingCurrency } from './lib/currency';
 import { DashboardPage } from './pages/Dashboard';
 import { DataPage } from './pages/Data';
 import { InstrumentsPage } from './pages/Instruments';
+import { IolPage } from './pages/Iol';
 import { LoginPage } from './pages/Login';
 import { OperationsPage } from './pages/Operations';
 import { PositionsPage } from './pages/Positions';
@@ -18,6 +19,7 @@ const NAV = [
   { to: '/operaciones', label: 'Operaciones' },
   { to: '/precios', label: 'Precios y dólar' },
   { to: '/instrumentos', label: 'Instrumentos' },
+  { to: '/iol', label: 'IOL' },
   { to: '/datos', label: 'Datos' },
 ];
 
@@ -108,6 +110,7 @@ function Shell({ authEnabled }: { authEnabled: boolean }) {
           <Route path="/operaciones" element={<OperationsPage />} />
           <Route path="/precios" element={<PricesPage />} />
           <Route path="/instrumentos" element={<InstrumentsPage />} />
+          <Route path="/iol" element={<IolPage />} />
           <Route path="/datos" element={<DataPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
