@@ -48,7 +48,9 @@ export function createApp(deps: AppDeps) {
     .route('/portfolio', portfolioRoutes(db, providers));
 
   api.onError((err, c) => {
-    if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
+    if (err instanceof HTTPException) {
+      return err.res ? err.getResponse() : c.json({ error: err.message }, err.status);
+    }
     if (err instanceof DomainError || err instanceof MissingFxRateError) {
       return c.json({ error: err.message }, 422);
     }
