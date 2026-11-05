@@ -1,0 +1,38 @@
+{
+  "name": "xinvest",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c blue,green \"npm:dev -w @xinvest/server\" \"npm:dev -w @xinvest/web\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p packages/domain && tsc -p apps/server && tsc -p apps/web",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "db:generate": "npm run db:generate -w @xinvest/server",
+    "db:migrate": "npm run db:migrate -w @xinvest/server",
+    "db:seed": "npm run db:seed -w @xinvest/server",
+    "build": "node scripts/build-vercel.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.5",
+    "@types/node": "^26.6.6",
+    "concurrently": "^10.0.6",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  },
+  "allowScripts": {
+    "esbuild@0.18.20": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true
+  }
+}
